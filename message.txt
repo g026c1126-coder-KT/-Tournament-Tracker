@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>e-Sports Tournament Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* グラフコンテナのスタイル要件 */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 1000px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 50vh;
+            max-height: 500px;
+            min-height: 300px;
+        }
+        
+        /* スクロールバーのカスタマイズ（データ入力テーブル用） */
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        /* タブのアクティブ時のスタイル */
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #2563eb;
+            font-weight: 600;
+        }
+        
+        body {
+            background-color: #f8fafc; /* Light background requirement */
+            color: #334155;
+        }
+    </style>
+    <!-- Chosen Palette: Slate/Blue (Clean, professional, light background) -->
+    <!-- Application Structure Plan: The SPA uses a 3-tab logical workflow to manage a tournament. 1. 'Settings' for core configuration (teams, matches, point rules). 2. 'Data Entry' featuring a dynamically generated matrix for rapid input of match results. 3. 'Dashboard' for synthesizing the entered data into a leaderboard and visual breakdown of points. This structure minimizes cognitive load by separating setup, task execution, and analysis. -->
+    <!-- Visualization & Content Choices: 
+         1. Leaderboard Table -> Goal: Inform ranking -> Simple ordered list. 
+         2. Stacked Bar Chart -> Goal: Compare point sources (Placement vs Kills) across top teams -> Chart.js -> Allows quick visual comparison of team strategies and performance distribution.
+         Confirming NO SVG/Mermaid. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="min-h-screen font-sans antialiased">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center">
+                    <span class="text-2xl font-bold text-blue-600 mr-2">🏆</span>
+                    <h1 class="text-xl font-bold text-slate-800">Tournament Tracker</h1>
+                </div>
+            </div>
+            <!-- Tabs -->
+            <nav class="flex space-x-8 mt-2" aria-label="Tabs">
+                <button id="tab-btn-settings" class="tab-btn tab-active py-4 px-1 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors" onclick="switchTab('settings')">
+                    1. 大会設定
+                </button>
+                <button id="tab-btn-input" class="tab-btn py-4 px-1 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors" onclick="switchTab('input')">
+                    2. 試合結果入力
+                </button>
+                <button id="tab-btn-results" class="tab-btn py-4 px-1 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors" onclick="switchTab('results')">
+                    3. 最終リザルト
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <!-- ========================================== -->
+        <!-- TAB 1: 設定 (Settings) -->
+        <!-- ========================================== -->
+        <section id="section-settings" class="block animate-fade-in">
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-slate-800">大会設定</h2>
+                <p class="text-slate-600 mt-1">
+                    大会の基本ルールを定義します。試合数、チーム数、および順位・キルごとの獲得ポイントを設定してください。ここで設定したチーム数に応じて、結果入力タブのレイアウトが自動的に調整されます。
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 基本設定 -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
+                    <h3 class="text-lg font-semibold border-b pb-2 mb-4">基本設定</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">総試合数</label>
+                            <input type="number" id="input-matches" min="1" max="20" value="3" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">参加チーム数</label>
+                            <input type="number" id="input-teams" min="2" max="50" value="5" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">1キルあたりのポイント</label>
+                            <input type="number" id="input-kill-point" min="0" value="1" class="w-full rounded-md border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <button onclick="applySettings()" class="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition-colors">
+                            設定を適用して入力欄を更新
+                        </button>
+                    </div>
+                </div>
+
+                <!-- チーム名・順位ポイント設定 -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- チーム名 -->
+                        <div>
+                            <h3 class="text-lg font-semibold border-b pb-2 mb-4 flex justify-between items-center">
+                                <span>チーム名設定</span>
+                                <span class="text-xs font-normal text-slate-500 bg-slate-100 px-2 py-1 rounded">番号が自動付与されます</span>
+                            </h3>
+                            <div id="team-list-container" class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                                <!-- JSで動的生成 -->
+                            </div>
+                        </div>
+                        
+                        <!-- 順位ポイント -->
+                        <div>
+                            <h3 class="text-lg font-semibold border-b pb-2 mb-4">順位ポイント設定</h3>
+                            <div id="placement-points-container" class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                                <!-- JSで動的生成 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: 試合結果入力 (Data Entry) -->
+        <!-- ========================================== -->
+        <section id="section-input" class="hidden animate-fade-in">
+            <div class="mb-6 flex justify-between items-end">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">試合結果入力</h2>
+                    <p class="text-slate-600 mt-1">
+                        各試合の順位に対するチームと獲得キル数を入力します。横方向に試合が展開されます。
+                    </p>
+                </div>
+                <button onclick="clearMatchData()" class="text-sm text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors">
+                    入力データをリセット
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-sm text-left whitespace-nowrap" id="match-input-table">
+                        <thead class="bg-slate-50 text-slate-700 border-b border-slate-200">
+                            <tr id="match-table-header">
+                                <!-- JSで動的生成: 順位, 試合1, 試合2... -->
+                            </tr>
+                        </thead>
+                        <tbody id="match-table-body" class="divide-y divide-slate-100">
+                            <!-- JSで動的生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: リザルト (Results) -->
+        <!-- ========================================== -->
+        <section id="section-results" class="hidden animate-fade-in">
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-slate-800">最終リザルト</h2>
+                <p class="text-slate-600 mt-1">
+                    入力されたデータに基づき、総合ポイントと順位を表示します。内訳グラフで各チームのプレイスタイルを確認できます。
+                </p>
+            </div>
+
+            <!-- トップ3ハイライト -->
+            <div id="top-3-container" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 hidden">
+                <!-- JSで動的生成 -->
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- リーダーボード -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden lg:col-span-1">
+                    <div class="bg-slate-800 text-white px-4 py-3 font-semibold">
+                        リーダーボード
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+                                <tr>
+                                    <th class="px-4 py-3 font-medium">順位</th>
+                                    <th class="px-4 py-3 font-medium">チーム</th>
+                                    <th class="px-4 py-3 font-medium text-right">総合Pt</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leaderboard-body" class="divide-y divide-slate-100">
+                                <!-- JSで動的生成 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- グラフ -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-2 flex flex-col">
+                    <h3 class="text-lg font-semibold border-b pb-2 mb-4 text-slate-800">ポイント内訳分析 (上位10チーム)</h3>
+                    <div class="flex-grow flex items-center justify-center">
+                        <!-- Chart Container (CRITICAL REQUIREMENT) -->
+                        <div class="chart-container">
+                            <canvas id="breakdownChart"></canvas>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-4 text-center">順位ポイント(生存)とキルポイント(攻撃)のバランスを示しています。</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // ==========================================
+        // State Management
+        // ==========================================
+        const state = {
+            matches: 3,
+            teams: 5,
+            killPoint: 1,
+            teamsData: {}, // { 1: "Team A", 2: "Team B" }
+            placementPoints: {}, // { 1: 10, 2: 5, 3: 1 ... }
+            matchResults: [], // Array of matches, each match is an object mapping placement to {teamId, kills}
+        };
+
+        let resultChartInstance = null;
+
+        // 初期設定データの生成
+        function initDefaultData() {
+            // デフォルトのチーム名
+            for (let i = 1; i <= state.teams; i++) {
+                state.teamsData[i] = `チーム ${i}`;
+            }
+            // デフォルトの順位ポイント (1位10pt, 2位6pt, 3位3pt, 4位1pt...)
+            for (let i = 1; i <= state.teams; i++) {
+                if (i === 1) state.placementPoints[i] = 10;
+                else if (i === 2) state.placementPoints[i] = 6;
+                else if (i === 3) state.placementPoints[i] = 3;
+                else if (i === 4) state.placementPoints[i] = 1;
+                else state.placementPoints[i] = 0;
+            }
+            initMatchResultsArray();
+        }
+
+        function initMatchResultsArray() {
+            state.matchResults = [];
+            for (let m = 0; m < state.matches; m++) {
+                let matchData = {};
+                for (let p = 1; p <= state.teams; p++) {
+                    matchData[p] = { teamId: "", kills: 0 };
+                }
+                state.matchResults.push(matchData);
+            }
+        }
+
+        // ==========================================
+        // UI Navigation Logic
+        // ==========================================
+        function switchTab(tabId) {
+            // Update Buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('tab-active', 'text-blue-600', 'font-semibold');
+                btn.classList.add('text-slate-500');
+            });
+            const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+            activeBtn.classList.add('tab-active');
+            activeBtn.classList.remove('text-slate-500');
+
+            // Update Sections
+            document.querySelectorAll('main > section').forEach(sec => {
+                sec.classList.add('hidden');
+            });
+            document.getElementById(`section-${tabId}`).classList.remove('hidden');
+
+            // Execute tab specific logic
+            if (tabId === 'input') {
+                renderMatchInputTable();
+            } else if (tabId === 'results') {
+                calculateAndRenderResults();
+            }
+        }
+
+        // ==========================================
+        // TAB 1: Settings Logic
+        // ==========================================
+        function renderSettings() {
+            const teamContainer = document.getElementById('team-list-container');
+            const pointsContainer = document.getElementById('placement-points-container');
+            
+            teamContainer.innerHTML = '';
+            pointsContainer.innerHTML = '';
+
+            for (let i = 1; i <= state.teams; i++) {
+                // Team Input
+                const teamName = state.teamsData[i] || `チーム ${i}`;
+                state.teamsData[i] = teamName; // Ensure it exists in state
+                const teamRow = document.createElement('div');
+                teamRow.className = 'flex items-center space-x-2';
+                teamRow.innerHTML = `
+                    <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded min-w-[2rem] text-center">${i}</span>
+                    <input type="text" value="${teamName}" onchange="updateTeamName(${i}, this.value)" placeholder="チーム名" class="flex-1 rounded border border-slate-300 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none">
+                `;
+                teamContainer.appendChild(teamRow);
+
+                // Placement Point Input
+                const point = state.placementPoints[i] !== undefined ? state.placementPoints[i] : 0;
+                state.placementPoints[i] = point; // Ensure it exists in state
+                const pointRow = document.createElement('div');
+                pointRow.className = 'flex items-center space-x-2';
+                pointRow.innerHTML = `
+                    <span class="text-slate-600 text-sm font-medium w-12">${i}位</span>
+                    <input type="number" min="0" value="${point}" onchange="updatePlacementPoint(${i}, this.value)" class="w-20 rounded border border-slate-300 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none text-right">
+                    <span class="text-slate-400 text-sm">pt</span>
+                `;
+                pointsContainer.appendChild(pointRow);
+            }
+        }
+
+        function applySettings() {
+            const newMatches = parseInt(document.getElementById('input-matches').value) || 1;
+            const newTeams = parseInt(document.getElementById('input-teams').value) || 2;
+            const newKillPt = parseInt(document.getElementById('input-kill-point').value) || 0;
+
+            let needsReset = false;
+            if (state.teams !== newTeams || state.matches !== newMatches) {
+                needsReset = true;
+            }
+
+            state.matches = newMatches;
+            state.teams = newTeams;
+            state.killPoint = newKillPt;
+
+            renderSettings();
+
+            if (needsReset) {
+                initMatchResultsArray();
+                alert('試合数またはチーム数が変更されたため、入力データ表の構造を更新しました。\n※既に入力済みの試合結果はリセットされます。');
+            } else {
+                // Just update kill points visually or silently
+                const btn = document.querySelector('button[onclick="applySettings()"]');
+                const originalText = btn.innerText;
+                btn.innerText = "✓ 適用しました";
+                btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                }, 1500);
+            }
+        }
+
+        function updateTeamName(id, val) {
+            state.teamsData[id] = val;
+        }
+
+        function updatePlacementPoint(id, val) {
+            state.placementPoints[id] = parseInt(val) || 0;
+        }
+
+        // ==========================================
+        // TAB 2: Data Entry Logic
+        // ==========================================
+        function getTeamOptionsHTML(selectedId) {
+            let options = `<option value="">--</option>`;
+            for (let i = 1; i <= state.teams; i++) {
+                const isSelected = selectedId == i ? 'selected' : '';
+                options += `<option value="${i}" ${isSelected}>No.${i}: ${state.teamsData[i]}</option>`;
+            }
+            return options;
+        }
+
+        function renderMatchInputTable() {
+            const thead = document.getElementById('match-table-header');
+            const tbody = document.getElementById('match-table-body');
+            
+            // Render Header
+            let headerHTML = `<th class="px-4 py-3 sticky left-0 bg-slate-100 z-10 w-20 shadow-[1px_0_0_0_#e2e8f0]">順位</th>`;
+            for (let m = 0; m < state.matches; m++) {
+                headerHTML += `<th class="px-4 py-3 min-w-[200px] border-l border-slate-200">試合 ${m + 1}</th>`;
+            }
+            thead.innerHTML = headerHTML;
+
+            // Render Body (Rows by Placement)
+            let bodyHTML = '';
+            for (let p = 1; p <= state.teams; p++) {
+                bodyHTML += `<tr>`;
+                // Placement column (sticky)
+                bodyHTML += `
+                    <td class="px-4 py-2 font-bold text-slate-700 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0]">
+                        ${p}位
+                        <div class="text-[10px] text-slate-400 font-normal">${state.placementPoints[p] || 0}pt</div>
+                    </td>
+                `;
+
+                // Columns for each match
+                for (let m = 0; m < state.matches; m++) {
+                    const cellData = state.matchResults[m][p] || { teamId: "", kills: 0 };
+                    bodyHTML += `
+                        <td class="px-4 py-2 border-l border-slate-100">
+                            <div class="flex items-center space-x-2">
+                                <select onchange="updateMatchResult(${m}, ${p}, 'teamId', this.value)" class="w-3/5 text-sm rounded border border-slate-300 px-2 py-1 focus:outline-none focus:border-blue-500">
+                                    ${getTeamOptionsHTML(cellData.teamId)}
+                                </select>
+                                <div class="flex items-center w-2/5 relative">
+                                    <input type="number" min="0" value="${cellData.kills}" onchange="updateMatchResult(${m}, ${p}, 'kills', this.value)" class="w-full text-sm rounded border border-slate-300 pl-2 pr-6 py-1 focus:outline-none focus:border-blue-500 text-right">
+                                    <span class="absolute right-2 text-xs text-slate-400">K</span>
+                                </div>
+                            </div>
+                        </td>
+                    `;
+                }
+                bodyHTML += `</tr>`;
+            }
+            tbody.innerHTML = bodyHTML;
+        }
+
+        function updateMatchResult(matchIndex, placement, field, value) {
+            if (!state.matchResults[matchIndex][placement]) {
+                state.matchResults[matchIndex][placement] = { teamId: "", kills: 0 };
+            }
+            if (field === 'kills') {
+                state.matchResults[matchIndex][placement][field] = parseInt(value) || 0;
+            } else {
+                state.matchResults[matchIndex][placement][field] = value;
+            }
+        }
+
+        function clearMatchData() {
+            if(confirm("入力された試合結果をすべてクリアしますか？")) {
+                initMatchResultsArray();
+                renderMatchInputTable();
+            }
+        }
+
+        // ==========================================
+        // TAB 3: Results Logic
+        // ==========================================
+        function calculateAndRenderResults() {
+            // 1. Calculate points
+            let resultsData = {}; // { teamId: { placementPts: 0, killPts: 0, totalPts: 0, name: "" } }
+            
+            // Initialize
+            for (let i = 1; i <= state.teams; i++) {
+                resultsData[i] = { 
+                    id: i,
+                    name: state.teamsData[i], 
+                    placementPts: 0, 
+                    killPts: 0, 
+                    totalPts: 0,
+                    kills: 0
+                };
+            }
+
+            // Aggregate
+            for (let m = 0; m < state.matches; m++) {
+                for (let p = 1; p <= state.teams; p++) {
+                    const data = state.matchResults[m][p];
+                    if (data && data.teamId) {
+                        const tId = data.teamId;
+                        if(resultsData[tId]) {
+                            const pPt = state.placementPoints[p] || 0;
+                            const kPt = (data.kills || 0) * state.killPoint;
+                            
+                            resultsData[tId].placementPts += pPt;
+                            resultsData[tId].killPts += kPt;
+                            resultsData[tId].kills += (data.kills || 0);
+                            resultsData[tId].totalPts += (pPt + kPt);
+                        }
+                    }
+                }
+            }
+
+            // 2. Sort by total points (Descending). If tie, by total kills.
+            let sortedResults = Object.values(resultsData).sort((a, b) => {
+                if (b.totalPts !== a.totalPts) {
+                    return b.totalPts - a.totalPts;
+                }
+                return b.kills - a.kills;
+            });
+
+            // 3. Render Top 3 Highlight
+            const top3Container = document.getElementById('top-3-container');
+            top3Container.innerHTML = '';
+            if (sortedResults.length > 0 && sortedResults[0].totalPts > 0) {
+                top3Container.classList.remove('hidden');
+                
+                const medals = ['🥇', '🥈', '🥉'];
+                const colors = ['bg-yellow-50 border-yellow-200 text-yellow-800', 'bg-slate-100 border-slate-300 text-slate-700', 'bg-orange-50 border-orange-200 text-orange-800'];
+                
+                for(let i=0; i<Math.min(3, sortedResults.length); i++) {
+                    const team = sortedResults[i];
+                    top3Container.innerHTML += `
+                        <div class="rounded-xl border p-4 flex flex-col items-center justify-center text-center ${colors[i] || 'bg-white'} shadow-sm">
+                            <div class="text-3xl mb-1">${medals[i] || ''}</div>
+                            <div class="text-sm font-semibold opacity-80">第${i+1}位</div>
+                            <div class="text-xl font-bold mt-1 truncate w-full px-2">${team.name}</div>
+                            <div class="text-2xl font-black mt-2">${team.totalPts}<span class="text-sm font-normal ml-1">pt</span></div>
+                        </div>
+                    `;
+                }
+            } else {
+                top3Container.classList.add('hidden');
+            }
+
+            // 4. Render Table
+            const tbody = document.getElementById('leaderboard-body');
+            tbody.innerHTML = '';
+            sortedResults.forEach((team, index) => {
+                const rowClass = index < 3 ? 'bg-blue-50/30' : '';
+                tbody.innerHTML += `
+                    <tr class="${rowClass} hover:bg-slate-50 transition-colors">
+                        <td class="px-4 py-3 font-bold text-slate-500">${index + 1}</td>
+                        <td class="px-4 py-3">
+                            <div class="font-medium text-slate-800">${team.name}</div>
+                            <div class="text-[10px] text-slate-400">No.${team.id}</div>
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            <div class="font-bold text-lg text-blue-600">${team.totalPts}</div>
+                            <div class="text-[10px] text-slate-400">順位:${team.placementPts} / キル:${team.killPts}</div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            // 5. Render Chart
+            renderChart(sortedResults);
+        }
+
+        function renderChart(sortedResults) {
+            const ctx = document.getElementById('breakdownChart').getContext('2d');
+            
+            // Limit to top 10 for readability
+            const chartData = sortedResults.slice(0, 10);
+            
+            const labels = chartData.map(t => {
+                // Ensure labels wrap or are truncated if too long
+                return t.name.length > 10 ? t.name.substring(0,10) + '...' : t.name;
+            });
+            const placementData = chartData.map(t => t.placementPts);
+            const killData = chartData.map(t => t.killPts);
+
+            if (resultChartInstance) {
+                resultChartInstance.destroy();
+            }
+
+            resultChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '順位ポイント',
+                            data: placementData,
+                            backgroundColor: 'rgba(59, 130, 246, 0.8)', // blue-500
+                            borderColor: 'rgb(37, 99, 235)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'キルポイント',
+                            data: killData,
+                            backgroundColor: 'rgba(239, 68, 68, 0.8)', // red-500
+                            borderColor: 'rgb(220, 38, 38)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // CRITICAL: allows chart to fill container height
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: { family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                footer: (tooltipItems) => {
+                                    let total = 0;
+                                    tooltipItems.forEach(function(tooltipItem) {
+                                        total += tooltipItem.parsed.y;
+                                    });
+                                    return '合計: ' + total + ' pt';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            grid: { display: false }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: '獲得ポイント'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ==========================================
+        // Initialization
+        // ==========================================
+        window.addEventListener('DOMContentLoaded', () => {
+            initDefaultData();
+            renderSettings();
+            // Start on settings tab
+            switchTab('settings');
+        });
+
+    </script>
+</body>
+</html>
